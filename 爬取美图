@@ -1,0 +1,80 @@
+import requests
+from bs4 import BeautifulSoup
+import os
+import time
+
+# 设置一些常量
+USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+HEADERS = {"User-Agent": USER_AGENT}
+DOMAIN = "https://www.umei.net"
+URL = "https://umei.net/tupian/"
+DIRECTORY = "picture"
+
+# HTTP请求的函数
+def get_page_source(url, headers=None):
+    resp = requests.get(url, headers=headers)
+    resp.encoding = 'utf-8'
+    return resp.text
+
+# 解析HTML的函数
+def parse_html(page_source):
+    return BeautifulSoup(page_source, "html.parser")
+
+# 下载和保存图片的函数
+def download_image(n, img_url):
+    img_resp = requests.get(img_url)
+    with open(os.path.join(DIRECTORY, f"{n}.jpg"), mode="wb") as pic_file:
+        pic_file.write(img_resp.content)
+
+# 主程序
+def main():
+    if not os.path.exists(DIRECTORY):
+        os.makedirs(DIRECTORY)
+
+    n = 1
+    page_source = get_page_source(URL, HEADERS)
+    main_page = parse_html(page_source)
+    a_list = main_page.find_all("li", attrs={"class": "i_list list_n2"})
+    for i in a_list:
+        href = i.find("a").get("href")
+        child_url = DOMAIN + href
+        page_num = 1
+        while True:
+            if page_num == 1:
+                cur_url = child_url
+            else:
+                url_parts = child_url.split(".html")
+                cur_url = f"{url_parts[0]}_{page_num}.html"
+            child_page_source = get_page_source(cur_url, HEADERS)
+            child_bs = parse_html(child_page_source)
+            child_div = child_bs.find("div", attrs={"class": "image_div"})
+            img_element = child_div.find("img")
+            if img_element is None:
+                print("No image element found. Skipping...")
+                break
+            img_src = img_element.get("src")
+            print(f"Downloading image from {img_src}")
+            try:
+                download_image(n, img_src)
+                print(f"Image {n} downloaded successfully.")
+            except Exception as e:
+                print(f"Failed to download image {n}, reason:{str(e)}")
+            page_num += 1
+            n += 1
+            # 检查是否有更多的页码
+            a_list = child_bs.find_all("li", attrs={"class": "i_list list_n2"})
+            if not a_list:
+                break
+        n += 1
+        time.sleep(30)
+if __name__ == '__main__':
+    main()
+
+
+#这个脚本的主要框架大致如下：
+#导入所需的模块：这包括requests模块用于网络请求， BeautifulSoup用于解析HTML，os用于文件操作。
+#设置常量：这里包括用户代理、请求头、网域、URL以及图片保存的文件夹等。
+#定义函数：这包括请求获取页面源码的函数、解析HTML的函数以及下载和保存图片的函数。
+#定义主函数：主函数中，首先检查所需的图片保存文件夹是否存在，不存在就创建它。然后使用上面定义的函数获取主页源码并解析，寻找到所有需要访问的子页面链接。对每个子页面，都进行循环访问并下载图片，直到该子页面无更多页码（子页面可能分页）。间隔一定时间继续下一个子页面访问和图片下载。
+#在脚本的最后，执行主函数。
+#在执行过程中，主要包括了网络请求、HTML解析和图片下载三大部分的操作。此外，所有的网络请求过程中都通过try-except进行异常捕获，失败时打印提示并继续之后的操作。
